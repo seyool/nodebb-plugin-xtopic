@@ -23,18 +23,18 @@ plugin.init = async function (params) {
 	const { router } = params;
 	const routeHelpers = require.main.require('./src/routes/helpers');
 
-	routeHelpers.setupAdminPageRoute(router, '/admin/plugins/question-and-answer', renderAdmin);
+	routeHelpers.setupAdminPageRoute(router, '/admin/plugins/xtopic', renderAdmin);
 	routeHelpers.setupPageRoute(router, '/unsolved', [], renderUnsolved);
 	routeHelpers.setupPageRoute(router, '/solved', [], renderSolved);
 
 	handleSocketIO();
 
-	plugin._settings = await meta.settings.get('question-and-answer');
+	plugin._settings = await meta.settings.get('xtopic');
 };
 
 plugin.appendConfig = async function (config) {
 	/// doBuildHeader -> apiController.loadConfig -> filter:config.get, 플러긴정보를 전역정보 config에 보관한다
-	config['question-and-answer'] = plugin._settings;
+	config['xtopic'] = plugin._settings;
 	return config;
 };
 
@@ -64,9 +64,9 @@ plugin.addNavigation = async function (menu) {
 plugin.addAdminNavigation = async function (header) {
 	/// filter:admin.header.build 필터훅, 관리자 페이지로 진입하려고 해당 매뉴를 클릭했을 때 호출됨
 	header.plugins.push({
-		route: '/plugins/question-and-answer',
+		route: '/plugins/xtopic',
 		icon: 'fa-question-circle',
-		name: 'Q&A',
+		name: 'X-Topic',
 	});
 	return header;
 };
@@ -188,7 +188,7 @@ async function addMetaData(data) {
 	/// data.res.locals.postHeader에 templateData를 참고하여 topic jsonld html을 렌더링한 결과를 저장한다
 	data.templateData.answerCount = Math.max(0, data.templateData.postcount - 1);
 	data.templateData.mainPost.title = validator.escape(String(data.templateData.titleRaw));
-	data.res.locals.postHeader = await data.req.app.renderAsync('partials/question-and-answer/topic-jsonld', data.templateData);
+	data.res.locals.postHeader = await data.req.app.renderAsync('partials/xtopic/topic-jsonld', data.templateData);
 	return data;
 }
 
@@ -387,9 +387,9 @@ async function renderAdmin(req, res) {
 	///	모든 카테고리 목록에서 cid, name, parentCid를 구하고 해당 정보를 템플릿에 전달하여 트리형태로 그려준다
 	const cids = await db.getSortedSetRange('categories:cid', 0, -1);
 	const data = await categories.getCategoriesFields(cids, ['cid', 'name', 'parentCid']);
-	res.render('admin/plugins/question-and-answer', {
+	res.render('admin/plugins/xtopic', {
 		categories: categories.getTree(data),
-		title: 'Q&A',
+		title: 'X-Topic',
 	});
 }
 
