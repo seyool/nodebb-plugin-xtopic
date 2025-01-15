@@ -200,6 +200,12 @@ plugin.getTopics = async function (hookData) {
 		if (topic && parseInt(topic.isQuestion, 10)) {
 			topic.icons.push(getIconMarkup(topic.isSolved));
 		}
+		///----------------------------------------
+		if (topic) {
+			if (topic.user.uid == 2) {
+				topic.user.displayname = "비공개";
+			}
+		}
 	});
 	return hookData;
 };
