@@ -387,7 +387,7 @@ async function renderAdmin(req, res) {
 	///	모든 카테고리 목록에서 cid, name, parentCid를 구하고 해당 정보를 템플릿에 전달하여 트리형태로 그려준다
 	const cids = await db.getSortedSetRange('categories:cid', 0, -1);
 	const data = await categories.getCategoriesFields(cids, ['cid', 'name', 'parentCid']);
-	res.render('admin/plugins/xtopic', {
+	res.render('admin/plugins/question-and-answer', {
 		categories: categories.getTree(data),
 		title: 'X-Topic',
 	});
