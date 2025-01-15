@@ -1,14 +1,14 @@
 'use strict';
 
-define('admin/plugins/question-and-answer', ['settings', 'translator', 'alerts'], function (Settings, Translator, alerts) {
+define('admin/plugins/xtopic', ['settings', 'translator', 'alerts'], function (Settings, Translator, alerts) {
 	const admin = {};
 	admin.init = function () {
-		Settings.load('question-and-answer', $('.question-and-answer-settings'));
+		Settings.load('xtopic', $('.question-and-answer-settings'));
 
 		render(ajaxify.data.categories, $('.all-categories'));
 
 		$('#save').on('click', function () {
-			Settings.save('question-and-answer', $('.question-and-answer-settings'), function () {
+			Settings.save('xtopic', $('.question-and-answer-settings'), function () {
 				alerts.alert({
 					type: 'success',
 					alert_id: 'question-and-answer-saved',
