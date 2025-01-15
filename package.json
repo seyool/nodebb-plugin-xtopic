@@ -1,11 +1,11 @@
 {
-  "name": "nodebb-plugin-question-and-answer",
-  "version": "1.2.8",
-  "description": "A nodebb-plugin-question-and-answer plugin for NodeBB which allows users to post topics as questions and select a post as the answer",
+  "name": "nodebb-plugin-xtopic",
+  "version": "1.2.9",
+  "description": "A nodebb-plugin-xtopic plugin for NodeBB which allows users to post topics as QnA, Username censored",
   "main": "library.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/psychobunny/nodebb-plugin-question-and-answer"
+    "url": "https://github.com/seyool/nodebb-plugin-xtopic"
   },
   "keywords": [
     "nodebb",
@@ -20,7 +20,7 @@
   },
   "license": "BSD-2-Clause",
   "bugs": {
-    "url": "https://github.com/psychobunny/nodebb-plugin-question-and-answer/issues"
+    "url": "https://github.com/seyool/nodebb-plugin-xtopic/issues"
   },
   "readmeFilename": "README.md",
   "nbbpm": {

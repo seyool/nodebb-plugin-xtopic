@@ -2,7 +2,7 @@
 
 nodebb-plugin-question-and-answer 플러긴을 수정하여 작성자 비노출 기능을 추가한 플러긴입니다.
 
-> This project is a modified version of [nodebb-plugin-question-and-answer](https://github.com/NodeBB/nodebb-plugin-question-and-answer). Original project is licensed under the MIT. Modifications were made by seyool.
+> This project is a modified version of [nodebb-plugin-question-and-answer](https://github.com/NodeBB/nodebb-plugin-question-and-answer). Original project is licensed under the BSD 2-Clause. Modifications were made by seyool.
 
 
 
