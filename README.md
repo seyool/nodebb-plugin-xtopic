@@ -1,39 +1,33 @@
-# Question and Answer Plugin for NodeBB
+# QnA, 작성자비노출을 지원하는 nodebb 플러긴
 
-A Q&A plugin for NodeBB Forums which allows users to post topics as questions and label it as solved.
+nodebb-plugin-question-and-answer 플러긴을 수정하여 작성자 비노출 기능을 추가한 플러긴입니다.
+
+> This project is a modified version of [nodebb-plugin-question-and-answer](https://github.com/NodeBB/nodebb-plugin-question-and-answer). Original project is licensed under the MIT. Modifications were made by seyool.
 
 
-## Installation
 
-    npm install nodebb-plugin-question-and-answer
+## 변경사항
 
-## Screenshots
+### 1. 사용자명 비노출 옵션 제공
 
-### In the composer you can post a topic as a question thread: 
+익명성 보장은 어떤 경우에 있어 글쓰기에 대한 망설임을 줄여줍니다. 이는 커뮤니티 규모 확장에 필수적인 요소인 사용자 유입에 도움이 됩니다. 
 
-![](http://i.imgur.com/yfXMbOq.png)
+nodebb는 guest에 대한 글쓰기를 허용하는 옵션이 제공되나, 익명으로 글작성이후 글에 대한 권한을 원 소유자가 가질 수 없습니다. 
 
-### Or, you can convert it to a question from thread tools:
+예시: 글 작성이후 삭제/수정 불가, 글에 대한 여러가지 통보수신(Notification) 불가 등
 
-![](http://i.imgur.com/V5S8YMu.png)
+때문에 사용자가 작성한 글에 대한 권한을 유지하면서 사용자 보인임을 드러내는 사용자명을 비노출로 처리해서 작성할 수 있는 기능이 필요했습니다.
 
-### Mark your question as solved via thread tools:
 
-![](http://i.imgur.com/0R7edVv.png)
 
-### Or if there is a specific post that solved your question, the post tools popup gives you the option to select that answer:
+### 2. 한국어 지원
 
-![](https://i.imgur.com/KOHJmBR.png)
+플러긴에 한국어 번역을 추가하였습니다
 
-### The accepted answer will be promoted to the top of the page:
 
-![](https://i.imgur.com/sLmTSTY.png)
 
-### And here is how it looks like in the category view, recent, popular, etc:
 
-![](http://i.imgur.com/eklpclQ.png)
 
-### A navigation route is available, so you can see the most recent unsolved threads. Just activate it in ACP -> General -> Navigation:
 
-![](http://i.imgur.com/oCLdSHe.png)
+
 
