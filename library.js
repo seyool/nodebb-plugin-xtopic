@@ -19,6 +19,7 @@ const social = require.main.require('./src/social');
 const plugin = module.exports;
 
 plugin.init = async function (params) {
+	///	admin페이지에 대한 라우트핸들러를 등록, 해결됨/미해결 지정 요청에 대한 라우트 핸들러 등록
 	const { router } = params;
 	const routeHelpers = require.main.require('./src/routes/helpers');
 
@@ -32,11 +33,13 @@ plugin.init = async function (params) {
 };
 
 plugin.appendConfig = async function (config) {
+	/// doBuildHeader -> apiController.loadConfig -> filter:config.get, 플러긴정보를 전역정보 config에 보관한다
 	config['question-and-answer'] = plugin._settings;
 	return config;
 };
 
 plugin.addNavigation = async function (menu) {
+	///TODO: 언제 호출되나?  filter:navigation.available 필터훅
 	menu = menu.concat(
 		[
 			{
@@ -59,6 +62,7 @@ plugin.addNavigation = async function (menu) {
 };
 
 plugin.addAdminNavigation = async function (header) {
+	/// filter:admin.header.build 필터훅, 관리자 페이지로 진입하려고 해당 매뉴를 클릭했을 때 호출됨
 	header.plugins.push({
 		route: '/plugins/question-and-answer',
 		icon: 'fa-question-circle',
@@ -68,6 +72,8 @@ plugin.addAdminNavigation = async function (header) {
 };
 
 plugin.addAnswerDataToTopic = async function (hookData) {
+	/// getTopic -> filter:topic.build
+	/// 토픽에 대한 템플릿 렌더링 정보가 완성되었을 때, 해당 토픽의 해결/미해결 여부에 따라 그에 맞는 icon html을 추가한다, 템플릿렌더링 정보에 질문글/추천글/채택글 정보와 사용자 정보에 대한 렌더링 정보를 추가함
 	if (!parseInt(hookData.templateData.isQuestion, 10)) {
 		return hookData;
 	}
@@ -77,10 +83,14 @@ plugin.addAnswerDataToTopic = async function (hookData) {
 };
 
 plugin.filterTopicGetPosts = async (hookData) => {
+	/// filter:topic.getPosts에 대한 훅함수, 토픽에 포함된 Posts를 구할때 호출, getTopic -> Topics.getTopicWithPosts -> Topics.getTopicPosts -> filter:topic.getPosts
+	/// 페이지 요청시 호출됨, 정확히는 토픽에 포함된 글들을 구해졌을때 호출됨, 현재 토픽에 대한 해결글이 없으면 리턴
 	const solvedPid = parseInt(hookData.topic.solvedPid, 10);
 	if (!solvedPid) {
 		return hookData;
 	}
+
+	/// showBestAnser가 왜 토픽내 첫번째 글의 index가 0인 것을 검사하는 지 모르겠다
 	const showBestAnswer = hookData.posts.length && hookData.posts[0].index === 0;
 	if (!showBestAnswer) {
 		hookData.posts.forEach((p) =>{
@@ -91,9 +101,12 @@ plugin.filterTopicGetPosts = async (hookData) => {
 		return hookData;
 	}
 
+	/// 첫번째 답글이 채택글이 아니면 answerIsNotFirstReply에 true를 지정, 
 	const topicPosts = hookData.posts;
 	const answerIsNotFirstReply = topicPosts.length > 1 && topicPosts[1].pid !== solvedPid;
 	const found = topicPosts.find(p => p.pid === solvedPid);
+	/// 첫번째 답글이 채택글이 아니고 채택된 글을 find한 결과가 있다면 1번째 요소에 solvedPost를 아래와 같이 값을 추가하고 삽입한다
+	/// 왜 이런짓을 하나 봤더니, 토픽 바로 아래 채택글을 두려고 한 것 이다.
 	if (found && answerIsNotFirstReply) {
 		const copy = { ...found };
 		copy.allowDupe = true;
@@ -102,11 +115,14 @@ plugin.filterTopicGetPosts = async (hookData) => {
 		copy.eventEnd = 0
 		topicPosts.splice(1, 0, copy);
 	} else if (answerIsNotFirstReply) {
+		/// TODO: getPostsByPids 함수동작 방식 이해,  채태글이 없고, 1번째 글이 채택글이 아닌 경우
+		/// 
 		const answers = await posts.getPostsByPids([solvedPid], hookData.uid);
 		const [postsData, postSharing] = await Promise.all([
 			topics.addPostData(answers, hookData.uid),
 			social.getActivePostSharing(),
 		]);
+		///
 		let post = postsData[0];
 		if (post) {
 			const bestAnswerTopicData = { ...hookData.topic };
@@ -125,6 +141,7 @@ plugin.filterTopicGetPosts = async (hookData) => {
 		}
 	}
 
+	/// 토픽내 답글들 중 채택글의 pid와 post.pid가 같으면 isAnswer값을 설정한다
 	hookData.posts.forEach((post) => {
 		if (post) {
 			post.isAnswer = post.pid === solvedPid;
@@ -135,6 +152,8 @@ plugin.filterTopicGetPosts = async (hookData) => {
 };
 
 async function addMetaData(data) {
+	/// 토픽에 대한 템플릿 렌더링 정보가 완성되었을 때 호출됨, 템플릿렌더링 정보에 메인글, 추천글, 채택글 정보와 추가적인 메타정보(사용자명, 추천정보, 북마크 등)을 추가해준다
+	/// 전달된 토픽의 mainPid와 추천글 목록에서 Pids를 구하고 2개 값을 pidsToFetch로 합친다
 	const { tid } = data.templateData;
 	const { uid } = data.req;
 	const pidsToFetch = [data.templateData.mainPid, await posts.getPidsFromSet(`tid:${tid}:posts:votes`, 0, 0, true)];
@@ -142,13 +161,16 @@ async function addMetaData(data) {
 	let suggestedAnswer;
 	let acceptedAnswer;
 
+	/// solvedPid가 있으면 pidsToFetch에 추가함
 	if (data.templateData.solvedPid) {
 		pidsToFetch.push(data.templateData.solvedPid);
 	}
 
+	/// ainPost, 제안답변, 수락한답변을 구함(pidsToFetch는 mainPid, 가장많은 추천을 받은 pid, solvedPid)
 	const postsData = [mainPost, suggestedAnswer, acceptedAnswer] = await posts.getPostsByPids(pidsToFetch, uid);
 	await topics.addPostData(postsData, uid);
 
+	/// 각 글들의 content html 을 escape되지 않도로 처리
 	postsData.forEach((p) => {
 		p.content = String(p.content || '')
 			.replace(/\\/g, '\\\\')
@@ -157,11 +179,13 @@ async function addMetaData(data) {
 			.replace(/\t/g, '\\t');
 	});
 
+	/// templateData에 mainPost/suggestedAnswer, answerScount, mainPost Title 을 추가한다
 	data.templateData.mainPost = mainPost || {};
 	data.templateData.acceptedAnswer = acceptedAnswer || {};
 	if (suggestedAnswer && suggestedAnswer.pid !== data.templateData.mainPid) {
 		data.templateData.suggestedAnswer = suggestedAnswer || {};
 	}
+	/// data.res.locals.postHeader에 templateData를 참고하여 topic jsonld html을 렌더링한 결과를 저장한다
 	data.templateData.answerCount = Math.max(0, data.templateData.postcount - 1);
 	data.templateData.mainPost.title = validator.escape(String(data.templateData.titleRaw));
 	data.res.locals.postHeader = await data.req.app.renderAsync('partials/question-and-answer/topic-jsonld', data.templateData);
@@ -169,6 +193,9 @@ async function addMetaData(data) {
 }
 
 plugin.getTopics = async function (hookData) {
+	/// filter:topics.get 훅함수, 보고있는 카테고리의 토픽들을 구해졌을 때 호출, getTopicsFromSet -> Topics.getTopics -> filter:topics.get
+	///	보고 있는 카테고리에 대한 토픽을 구해졌을 때, hookData.topics의 각 토픽내 isQuestion이 존재하면 isSolved값에 따라 topic.icons에 해결됨/미해결중 아이콘을 추가함
+	///	즉 토픽목록정보에 해당 토픽이 해결됨/미해결 표시를 위한 html 태그를 추가해서 리턴함
 	hookData.topics.forEach((topic) => {
 		if (topic && parseInt(topic.isQuestion, 10)) {
 			topic.icons.push(getIconMarkup(topic.isSolved));
@@ -185,6 +212,8 @@ function getIconMarkup(isSolved) {
 }
 
 plugin.filterPostGetPostSummaryByPids = async function (hookData) {
+	/// 답글을 막 작성하고 나서 호출되었다
+	/// hookData는 caller, posts=[포스팅 요약정보]
 	const tids = hookData.posts.map(p => p && p.tid);
 	const topicData = await topics.getTopicsFields(tids, ['isQuestion', 'isSolved']);
 	hookData.posts.forEach((p, index) => {
@@ -197,6 +226,10 @@ plugin.filterPostGetPostSummaryByPids = async function (hookData) {
 };
 
 plugin.addThreadTool = async function (hookData) {
+	///	토픽도구 클릭시 매뉴가 나올때 호출됨, 토픽이 질문이면 그에 맞는 토픽도구 매뉴 출력에 필요한 정보를 리턴, getTopic -> filter:topic.thread_tools
+	/// 질문이면 해결로 표시, 일반토픽으로 지정을 리턴
+	/// 질문이 아니면 질문으로 표시 설정 정보를 리턴한다
+	/// hookData는 caller, tools=[], topic, uid=2 이 전달됨
 	const isSolved = parseInt(hookData.topic.isSolved, 10);
 
 	if (parseInt(hookData.topic.isQuestion, 10)) {
@@ -223,14 +256,21 @@ plugin.addThreadTool = async function (hookData) {
 };
 
 plugin.addPostTool = async function (hookData) {
+	/// 글 보기중 글도구(수정/신고 등이 있는 매뉴)를 클릭할때 호출된다, filter:post.tools
+	/// hookData는 pid=30, post=글정보, tools=[], uid=2 
+	///	getTopicDataByPid는 pid에 해당하는 토픽정보를 리턴한다
 	const data = await topics.getTopicDataByPid(hookData.pid);
 	if (!data) {
 		return hookData;
 	}
 
+	///	isSolved, isQuestion값을 한번 더 검사하여 지정한다
 	data.isSolved = parseInt(data.isSolved, 10) === 1;
 	data.isQuestion = parseInt(data.isQuestion, 10) === 1;
+	///	현재 사용자가 tid토픽에 대해 해결됨 설정이 가능한 사용자라면
 	const canSolve = await canSetAsSolved(data.tid, hookData.uid);
+	/// 질문토픽이고 선택한 글이 해결된 글이 아니고, 선택한 글이 토픽글pid가 아니면
+	///	사용자가 해결글 이라고 설정할 수 있도록 매뉴표현 정보를 tools를 추가한다
 	if (canSolve && data.isQuestion &&
 		parseInt(hookData.pid, 10) !== parseInt(data.solvedPid, 10) &&
 		parseInt(hookData.pid, 10) !== parseInt(data.mainPid, 10)) {
@@ -244,6 +284,7 @@ plugin.addPostTool = async function (hookData) {
 };
 
 plugin.getConditions = async function (conditions) {
+	/// filter:rewards.conditions 필터훅, 관리자 설정에서 리워드 매뉴 클릭시 호출됨, 리워드에 해결된 질문수를 추가한다
 	conditions.push({
 		name: 'Times questions accepted',
 		condition: 'qanda/question.accepted',
@@ -252,11 +293,14 @@ plugin.getConditions = async function (conditions) {
 };
 
 plugin.onTopicCreate = async function (payload) {
+	/// filter:topic.create 필터 훅, 토픽생성하고 작성완료를 눌렀을 때 호출
+	/// 생성되는 토픽에 질문글로 취급하는 필드를 추가
 	let isQuestion;
 	if (payload.data.hasOwnProperty('isQuestion')) {
 		isQuestion = true;
 	}
 
+	/// 플러긴 옵션에 강제로 질문글로 등록이 on이거나 현재 cid가 질문글카테고리로 지정된 경우라면
 	// Overrides from ACP config
 	if (plugin._settings.forceQuestions === 'on' || plugin._settings[`defaultCid_${payload.topic.cid}`] === 'on') {
 		isQuestion = true;
@@ -272,12 +316,15 @@ plugin.onTopicCreate = async function (payload) {
 };
 
 plugin.actionTopicSave = async function (hookData) {
+	/// 토픽 생성작성후 컴포저에서 제출 눌렀을 때 호출되며, 제출버튼 옵션이 질문글로 올리기로 하였다면 토픽글로 설정한다
 	if (hookData.topic && hookData.topic.isQuestion) {
 		await db.sortedSetAdd(hookData.topic.isSolved === 1 ? 'topics:solved' : 'topics:unsolved', Date.now(), hookData.topic.tid);
 	}
 };
 
 plugin.filterTopicEdit = async function (hookData) {
+	/// 토픽편집이 완료됐을때 호출됨
+	/// 질문글로 설정해서 제출했는지 여부와 이미 질문글로 설정되었는지 여부와 비교해서 다르면 
 	const isNowQuestion = hookData.data.isQuestion === true || parseInt(hookData.data.isQuestion, 10) === 1;
 	const wasQuestion = parseInt(await topics.getTopicField(hookData.topic.tid, 'isQuestion'), 10) === 1;
 	if (isNowQuestion !== wasQuestion) {
@@ -288,12 +335,14 @@ plugin.filterTopicEdit = async function (hookData) {
 };
 
 plugin.actionTopicPurge = async function (hookData) {
+	/// 호출시점
 	if (hookData.topic) {
 		await db.sortedSetsRemove(['topics:solved', 'topics:unsolved'], hookData.topic.tid);
 	}
 };
 
 plugin.filterComposerPush = async function (hookData) {
+	/// 글 편집시 호출, 현재 편집중인 글이 질문글인지 여부를 확인해서 hookData.isQuestion값으로 설정, hookData.tid가 이미 있음에도 아래처럼 getPostField()를 통해 또 구하는 것이 이상
 	const tid = await posts.getPostField(hookData.pid, 'tid');
 	const isQuestion = await topics.getTopicField(tid, 'isQuestion');
 	hookData.isQuestion = isQuestion;
@@ -302,6 +351,8 @@ plugin.filterComposerPush = async function (hookData) {
 };
 
 plugin.staticApiRoutes = async function ({ router, middleware, helpers }) {
+	/// static:api.routes 훅함수, 플러긴 로딩시 호출됨
+	/// 
 	router.get('/qna/:tid', middleware.assert.topic, async (req, res) => {
 		let { isQuestion, isSolved } = await topics.getTopicFields(req.params.tid, ['isQuestion', 'isSolved']);
 		isQuestion = isQuestion || '0';
@@ -311,6 +362,8 @@ plugin.staticApiRoutes = async function ({ router, middleware, helpers }) {
 };
 
 plugin.registerTopicEvents = async function ({ types }) {
+	/// filter:topicEvents.init 필터훅, nodebb초기화시 호출되며, 플러긴에서 사용할 아이콘과 그에 해당하는 언어번역함수를 types에 추가하고 리턴함
+	///
 	types['qanda.as_question'] = {
 		icon: 'fa-question',
 		translation: async (event, language) => topics.events.translateSimple(event, language, 'qanda:thread.alert.as_question'),
@@ -331,6 +384,7 @@ plugin.registerTopicEvents = async function ({ types }) {
 };
 
 async function renderAdmin(req, res) {
+	///	모든 카테고리 목록에서 cid, name, parentCid를 구하고 해당 정보를 템플릿에 전달하여 트리형태로 그려준다
 	const cids = await db.getSortedSetRange('categories:cid', 0, -1);
 	const data = await categories.getCategoriesFields(cids, ['cid', 'name', 'parentCid']);
 	res.render('admin/plugins/question-and-answer', {
@@ -343,6 +397,8 @@ function handleSocketIO() {
 	SocketPlugins.QandA = {};
 
 	SocketPlugins.QandA.toggleSolved = async function (socket, data) {
+		/// 호출시점
+		/// 호출시점
 		const canSolve = await canSetAsSolved(data.tid, socket.uid);
 		if (!canSolve) {
 			throw new Error('[[error:no-privileges]]');
@@ -353,6 +409,8 @@ function handleSocketIO() {
 
 
 	SocketPlugins.QandA.markPostAsAnswer = async function (socket, data) {
+		/// 호출시점
+		/// 호출시점
 		const canSolve = await canSetAsSolved(data.tid, socket.uid);
 		if (!canSolve) {
 			throw new Error('[[error:no-privileges]]');
@@ -362,6 +420,7 @@ function handleSocketIO() {
 	};
 
 	SocketPlugins.QandA.toggleQuestionStatus = async function (socket, data) {
+		/// 토픽도구에서 일반글/질문글로 지정 매뉴를 클릭시,  
 		const canSolve = await canSetAsSolved(data.tid, socket.uid);
 		if (!canSolve) {
 			throw new Error('[[error:no-privileges]]');
@@ -372,12 +431,15 @@ function handleSocketIO() {
 }
 
 async function toggleSolved(uid, tid) {
+	/// 해결/미해결을 토글 설정한다
 	let isSolved = await topics.getTopicField(tid, 'isSolved');
 	isSolved = parseInt(isSolved, 10) === 1;
 	return await markSolved(uid, tid, 0, !isSolved);
 }
 
 async function markSolved(uid, tid, pid, isSolved) {
+	/// 해결여부값(isSolved)에 따른 토픽에서 수정해야 할 필드값을 준비하고, 이 값들로 tid에 존재하는 필드를 업데이트 한다
+	/// 
 	const updatedTopicFields = isSolved ?
 		{ isSolved: 1, solvedPid: pid }	:
 		{ isSolved: 0, solvedPid: 0 };
@@ -389,6 +451,7 @@ async function markSolved(uid, tid, pid, isSolved) {
 	await topics.setTopicFields(tid, updatedTopicFields);
 
 	if (isSolved) {
+		/// pid를 해결글로 채택헀다면, 토픽에 topics:solved 필드를 설정하고 이벤트로 남긴다. 
 		await Promise.all([
 			db.sortedSetRemove('topics:unsolved', tid),
 			db.sortedSetAdd('topics:solved', Date.now(), tid),
@@ -405,6 +468,7 @@ async function markSolved(uid, tid, pid, isSolved) {
 			});
 		}
 	} else {
+		/// 미해결로 설정한다면 topics:unsolved 필드를 설정하고 이벤트로 남긴다
 		await Promise.all([
 			db.sortedSetAdd('topics:unsolved', Date.now(), tid),
 			db.sortedSetRemove('topics:solved', tid),
@@ -417,6 +481,8 @@ async function markSolved(uid, tid, pid, isSolved) {
 }
 
 async function toggleQuestionStatus(uid, tid) {
+	/// 호출시점: 토픽도구에서 일반글/질문글로 지정 매뉴를 클릭시
+	/// tid에 해당하는 토픽이 질문글이면 질문글여부/해결여부/채택글pid 값을 토픽에 추가, 일반글로 전환한다면 질문글정보를 삭제하고, 토글결과를 리턴함
 	let isQuestion = await topics.getTopicField(tid, 'isQuestion');
 	isQuestion = parseInt(isQuestion, 10) === 1;
 
@@ -440,7 +506,9 @@ async function toggleQuestionStatus(uid, tid) {
 }
 
 async function canPostTopic(uid) {
+	///	모든 카테고리id에서 주어진 uid로 접근가능한 카테고리인지 확인하여 결과를 리턴
 	let cids = await categories.getAllCidsFromSet('categories:cid');
+	///>>> 여기 cids값을 어떻게 처리하여 권한 검사를 해서 토픽작성가능한지 체크 원리가 궁금하다
 	cids = await privileges.categories.filterCids('topics:create', cids, uid);
 	return cids.length > 0;
 }
@@ -454,6 +522,7 @@ async function renderSolved(req, res) {
 }
 
 async function renderQnAPage(type, req, res) {
+	///	qna페이지를 그리기 전 사용자 정보와 접근권한을 검사한다
 	const page = parseInt(req.query.page, 10) || 1;
 	const { cid } = req.query;
 	const [settings, categoryData, canPost, isPrivileged] = await Promise.all([
@@ -487,6 +556,9 @@ async function renderQnAPage(type, req, res) {
 }
 
 async function getTopics(type, page, cids, uid, settings) {
+	/// filter:topics.get 에대한 훅함수
+	///	토픽을 가져오기 전 권한검사를 하고 tids를 구하고 토픽데이터를 구하여 리턴
+	///>>> 여기도 어떤 쿼리를 날려서 어떻게 동작하는지 잘 모르겠다.
 	cids = cids || [];
 	if (!Array.isArray(cids)) {
 		cids = [cids];
@@ -494,6 +566,7 @@ async function getTopics(type, page, cids, uid, settings) {
 	const set = `topics:${type}`;
 	let tids = [];
 	if (cids.length) {
+		/// 
 		cids = await privileges.categories.filterCids('read', cids, uid);
 		const allTids = await Promise.all(cids.map(async cid => await db.getSortedSetRevIntersect({
 			sets: [set, `cid:${cid}:tids:lastposttime`],
@@ -502,6 +575,7 @@ async function getTopics(type, page, cids, uid, settings) {
 		})));
 		tids = allTids.flat().sort((tid1, tid2) => tid2 - tid1);
 	} else {
+		///
 		tids = await db.getSortedSetRevRange(set, 0, 199);
 		tids = await privileges.topics.filterTids('read', tids, uid);
 	}
@@ -522,6 +596,7 @@ async function getTopics(type, page, cids, uid, settings) {
 }
 
 async function canSetAsSolved(tid, uid) {
+	///	uid	사용자가 tid에 대해 해겸됨이라고 설정할 수 있는지 검사
 	if (plugin._settings.onlyAdmins === 'on') {
 		return await privileges.topics.isAdminOrMod(tid, uid);
 	}

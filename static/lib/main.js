@@ -19,12 +19,16 @@ $('document').ready(function () {
 		}
 	});
 
+	///	토픽도구 로딩이 완료되면 질문글지정, 해결됨 지정 핸들러를 등록
 	$(window).on('action:topic.tools.load', addHandlers);
+	///	선택한 글을 답변글로 지정하는 핸들러 등록
 	$(window).on('action:post.tools.load', addPostHandlers);
 
+	///	토픽과 답글 로딩이 끝난 후 답변완된 글은 완료 표시를 한다
 	$(window).on('action:posts.loaded', markPostAsSolved);
 	$(window).on('action:topic.loaded', markPostAsSolved);
 
+	///	composer로딩된 후 composer actionBar에 드롭다운 리스트 항목에 대한 핸들러를 연결한다
 	$(window).on('action:composer.loaded', function (ev, data) {
 		// Return early if it is a reply and not a new topic
 		if (data.hasOwnProperty('composerData') && !data.composerData.isMain) {
@@ -34,6 +38,7 @@ $('document').ready(function () {
 		addQnADropdownHandler(actionBar);
 	});
 
+	///	composer 생성에 필터훅 지정, submitOptions에 새로운 드롭다운리스트 항목 추가
 	require(['hooks', 'translator'], function (hooks, translator) {
 		hooks.on('filter:composer.create', async (hookData) => {
 			const translated = await translator.translate('[[qanda:thread.tool.as_question]]');
@@ -45,6 +50,7 @@ $('document').ready(function () {
 		});
 	});
 
+	///	도롭다운리스트 항목 클릭시 이벤트핸들러, 단순히 질문으로 등록할지 체크를 토글한다
 	function addQnADropdownHandler(actionBar) {
 		const item = actionBar.find(`[data-action="ask-as-question"]`);
 		item.on('click', () => {
@@ -60,6 +66,7 @@ $('document').ready(function () {
 		});
 	}
 
+	///	글수정 완료이벤트에서 편집된 글의 질문여부/해결여부를 확인하여 토글시킨다
 	$(window).on('action:posts.edited', function (ev, data) {
 		require(['api'], function (api) {
 			api.get(`/plugins/qna/${data.topic.tid}`, {})
@@ -73,20 +80,24 @@ $('document').ready(function () {
 	});
 
 	function addHandlers() {
+		///	토픽도구 매뉴중 질문으로 설정, 해결됨으로 설정에 대한 핸들러
 		$('.toggleQuestionStatus').on('click', toggleQuestionStatus);
 		$('.toggleSolved').on('click', toggleSolved);
 	}
 
 	function addPostHandlers() {
+		///	토픽에 대한 답변글중 선택한 글을 답변글로 설정
 		$('[component="qanda/post-solved"]').on('click', markPostAsAnswer);
 	}
 
 	function toggleQuestionStatus() {
+		///	선택된 토픽을 질문으로 db내 설정
 		var tid = ajaxify.data.tid;
 		callToggleQuestion(tid, true);
 	}
 
 	function callToggleQuestion(tid, refresh) {
+		///	선택된 토픽을 질문으로 db내 설정
 		socket.emit('plugins.QandA.toggleQuestionStatus', { tid: tid }, function (err, data) {
 			if (err) {
 				return alertType('error', err);
@@ -100,6 +111,7 @@ $('document').ready(function () {
 	}
 
 	function toggleSolved() {
+		///	선택된 토픽을 db내 해결됨으로 설정
 		var tid = ajaxify.data.tid;
 		socket.emit('plugins.QandA.toggleSolved', { tid: tid }, function (err, data) {
 			if (err) {
@@ -112,6 +124,7 @@ $('document').ready(function () {
 	}
 
 	function markPostAsAnswer() {
+		///	선택된 글을 해당 토픽에 대한 답변으로지정
 		var tid = ajaxify.data.tid;
 		var pid = $(this).parents('[data-pid]').attr('data-pid');
 
@@ -126,6 +139,7 @@ $('document').ready(function () {
 	}
 
 	function markPostAsSolved() {
+		///	해결된 답변으로 표시한다.
 		if (!ajaxify.data.solvedPid) {
 			return;
 		}
