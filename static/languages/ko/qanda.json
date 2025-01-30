@@ -19,7 +19,10 @@
     "thread.tool.mark_solved": "해결됨으로 설정",
     "thread.tool.mark_unsolved": "미해결로 설정",
     "thread.tool.make_normal": "일반토픽으로 변경",
-    "thread.tool.as_question": "질문글로 변경합니다",
+    "thread.tool.as_question": "질문글로 등록",
+
+    "thread.tool.as_anonymous": "작성자 비노출",
+
     "thread.button.as_question": "질문글로 등록합니다",
     "post.alert.correct_answer": "이 게시물을 정답으로 채택했습니다",
     "post.tool.mark_correct": "정답으로 채택",

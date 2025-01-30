@@ -6,9 +6,11 @@
 	"library": "./library.js",
 	"hooks": [
 		{ "hook": "static:app.load", "method": "init" },
+		{ "hook": "filter:account.getPostsFromUserSet", "method": "getPostsFromUserSetFilter" },
 		{ "hook": "filter:config.get", "method": "appendConfig" },
 		{ "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
 		{ "hook": "filter:topics.get", "method": "getTopics" },
+		{ "hook": "filter:topics.addPostData", "method": "addPostDataFilter" },
 		{ "hook": "filter:post.getPostSummaryByPids", "method": "filterPostGetPostSummaryByPids" },
 		{ "hook": "filter:topic.build", "method": "addAnswerDataToTopic" },
 		{ "hook": "filter:topic.getPosts", "method": "filterTopicGetPosts" },
@@ -19,6 +21,19 @@
 		{ "hook": "filter:topic.create", "method": "onTopicCreate" },
 		{ "hook": "action:topic.save", "method": "actionTopicSave" },
 		{ "hook": "filter:topic.edit", "method": "filterTopicEdit" },
+
+		{ "hook": "filter:post.create", "method": "onPostCreate" },
+		{ "hook": "filter:post.edit", "method": "onPostEdit" },
+
+		{ "hook": "filter:teasers.get", "method": "onTeasersGet" },
+
+		{ "hook": "filter:composer.build", "method": "filterComposerBuild" },
+
+		
+		
+		{ "hook": "filter:composer.topic.push", "method": "filterComposerTopicPush" },
+		
+
 		{ "hook": "action:topic.purge", "method": "actionTopicPurge" },
 		{ "hook": "filter:composer.push", "method": "filterComposerPush" },
 		{ "hook": "static:api.routes", "method": "staticApiRoutes" },

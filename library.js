@@ -73,7 +73,29 @@ plugin.addAdminNavigation = async function (header) {
 
 plugin.addAnswerDataToTopic = async function (hookData) {
 	/// getTopic -> filter:topic.build
-	/// 토픽에 대한 템플릿 렌더링 정보가 완성되었을 때, 해당 토픽의 해결/미해결 여부에 따라 그에 맞는 icon html을 추가한다, 템플릿렌더링 정보에 질문글/추천글/채택글 정보와 사용자 정보에 대한 렌더링 정보를 추가함
+	/// 토픽에 대한 템플릿 렌더링 정보가 완성되었을 때, 해당 토픽의 해결/미해결 여부에 따라 그에 맞는 icon html을 추가한다, 
+	// 템플릿렌더링 정보에 질문글/추천글/채택글 정보와 사용자 정보에 대한 렌더링 정보를 추가함
+
+	///----------------------------------------
+	let needRemoveAuthor = false;
+	hookData.templateData.posts.forEach((post) => {
+		if (post && post.isAnonymous) {
+			post.user = usernameCensor(post.uid, {...post.user});
+			post.uid = 0;
+			needRemoveAuthor = true;
+		}
+	});
+
+	if (needRemoveAuthor) {
+		hookData.templateData.author = usernameCensor(hookData.templateData.uid, hookData.templateData.author);
+		hookData.templateData.author.uid = 0;
+	}
+
+	/// 지금 보고 있는 카테고리(cid)에 사용자(uid)가 토픽/글 작성할 수 있으면 canPostAnonymous
+
+	///-----------------------------------------
+
+
 	if (!parseInt(hookData.templateData.isQuestion, 10)) {
 		return hookData;
 	}
@@ -85,6 +107,16 @@ plugin.addAnswerDataToTopic = async function (hookData) {
 plugin.filterTopicGetPosts = async (hookData) => {
 	/// filter:topic.getPosts에 대한 훅함수, 토픽에 포함된 Posts를 구할때 호출, getTopic -> Topics.getTopicWithPosts -> Topics.getTopicPosts -> filter:topic.getPosts
 	/// 페이지 요청시 호출됨, 정확히는 토픽에 포함된 글들을 구해졌을때 호출됨, 현재 토픽에 대한 해결글이 없으면 리턴
+
+	/// 토픽내 답글들 중 채택글의 pid와 post.pid가 같으면 isAnswer값을 설정한다
+	hookData.posts.forEach((post) => {
+		///----------------------------------------
+		if (post && post.isAnonymous) {
+			post.user = usernameCensor(post.uid, {...post.user});
+			post.uid = 0;
+		}
+	});
+	
 	const solvedPid = parseInt(hookData.topic.solvedPid, 10);
 	if (!solvedPid) {
 		return hookData;
@@ -145,7 +177,7 @@ plugin.filterTopicGetPosts = async (hookData) => {
 	hookData.posts.forEach((post) => {
 		if (post) {
 			post.isAnswer = post.pid === solvedPid;
-		}
+		}	
 	});
 
 	return hookData;
@@ -193,20 +225,107 @@ async function addMetaData(data) {
 }
 
 plugin.getTopics = async function (hookData) {
+	/// filter:topics.get 은 카테고리 목록 화면을 접근할 때 호출됨
 	/// filter:topics.get 훅함수, 보고있는 카테고리의 토픽들을 구해졌을 때 호출, getTopicsFromSet -> Topics.getTopics -> filter:topics.get
 	///	보고 있는 카테고리에 대한 토픽을 구해졌을 때, hookData.topics의 각 토픽내 isQuestion이 존재하면 isSolved값에 따라 topic.icons에 해결됨/미해결중 아이콘을 추가함
 	///	즉 토픽목록정보에 해당 토픽이 해결됨/미해결 표시를 위한 html 태그를 추가해서 리턴함
 	hookData.topics.forEach((topic) => {
 		if (topic && parseInt(topic.isQuestion, 10)) {
 			topic.icons.push(getIconMarkup(topic.isSolved));
-		}
-		///----------------------------------------
-		if (topic) {
-			if (topic.user.uid == 2) {
-				topic.user.displayname = "비공개";
+		}		
+	});
+
+	///----------------------------------------
+	const promises = hookData.topics.map(async (topic, idx, topicArray) => {
+		const postField = await posts.getPostFields(topic.mainPid, ['isAnonymous']);
+		if (postField.isAnonymous) {
+			/// 깊은 복사, user를 변경하면 topics의 모든 요소의 user가 변경된다
+			topic.user = usernameCensor(topic.uid, {...topic.user});
+			topic.uid = 0;
+
+			if (topic.teaser && topic.teaser.user) {
+				topic.teaser.user = usernameCensor(topic.teaser.uid, {...topic.teaser.user});
+				topic.teaser.uid = 0;
 			}
 		}
 	});
+	await Promise.all(promises);
+	///----------------------------------------
+
+	return hookData;
+};
+
+plugin.addPostDataFilter = async function (hookData) {
+	/// 글정보에 사용자, 에디터, 북마크, 투표 정보등을 추가하여 리턴하는 함수
+	/// 대부분 글에 대한 정보 조회를 할때 이 함수가 호출됨
+	/// filter:topics.addPostData 필터 훅 함수, Posts.addPostData() 함수내에서 호출되는 훅 필터함수
+	hookData.posts.forEach((post) => {
+		///----------------------------------------
+		if (post && post.isAnonymous) {
+			post.user = usernameCensor(post.uid, {...post.user});
+			post.uid = 0;
+		}
+	});
+	return hookData;
+};
+
+plugin.getPostsFromUserSetFilter = async function (hookData) {
+	/// 프로필 정보 페이지에서 프로필주인이 작성한 글, 토푁, 팔로워 등에 대한 정보를 요청할때 호출됨
+	/// 프로필 사용자가 작성한 글들이 익명글이라면, 프로필에서 노출되지 않도록 숨긴다
+	
+	const payload = hookData.res.locals.userData;
+
+	if (hookData.data.type == "posts")
+	{
+		/// 이 함수는 posts.getPostSummariesFromSet() -> posts.getPostSummaryByPids() 호출시
+		/// 호출된다. post 데이터에 isAnonymous필드를 채워서 리턴하지 않으므로 직접 쿼리 필요
+		let newPosts = [];
+
+		///	forEach는 await구문에 대해 처리결과를 기다려주지 않기 때문에 map()을 이용하였다
+		const promises = hookData.itemData.posts.map(async (post, idx, postArray) => {
+			const postField = await posts.getPostFields(post.pid, ['isAnonymous']);
+
+			if (postField.isAnonymous != true) {
+				newPosts.push(postArray[idx]);
+				//console.log(idx, " ", post.topic.title);
+			}
+			// else {
+			// 	console.log(idx, " ", post.topic.title, " ==> removed");
+			// }
+		});
+		await Promise.all(promises);
+
+		if (newPosts.length != hookData.itemData.posts.length)
+		{
+			hookData.itemData.posts = newPosts;
+			hookData.itemCount = newPosts.length;
+			payload.postcount = newPosts.length;
+			//payload.counts.posts = newPosts.length;
+		}
+	}
+	else if (hookData.data.type == "topics")
+	{
+		let newTopics = [];
+
+		///	forEach는 await구문에 대해 처리결과를 기다려주지 않기 때문에 map()을 이용하였다
+		const promises = hookData.itemData.topics.map(async (topic, idx, topicArray) => {
+			const postField = await posts.getPostFields(topic.mainPid, ['isAnonymous']);
+			if (postField.isAnonymous != true) {
+				newTopics.push(topicArray[idx]);
+				//console.log(idx, " ", topic.title);
+			}
+		});
+		await Promise.all(promises);
+
+		if (newTopics.length != hookData.itemData.topics.length)
+		{
+			hookData.itemData.topics = newTopics;
+			hookData.itemCount = newTopics.length;
+			payload.topiccount = newTopics.length;
+			//payload.counts.topics = newTopics.length;
+		}
+	}
+
 	return hookData;
 };
 
@@ -218,7 +337,8 @@ function getIconMarkup(isSolved) {
 }
 
 plugin.filterPostGetPostSummaryByPids = async function (hookData) {
-	/// 답글을 막 작성하고 나서 호출되었다
+	/// 답글을 막 작성하고 나서 호출되었다, filter:post.getPostSummaryByPids 필터 훅
+	/// 프로필을 클릭했을 때 호출됨
 	/// hookData는 caller, posts=[포스팅 요약정보]
 	const tids = hookData.posts.map(p => p && p.tid);
 	const topicData = await topics.getTopicsFields(tids, ['isQuestion', 'isSolved']);
@@ -228,6 +348,21 @@ plugin.filterPostGetPostSummaryByPids = async function (hookData) {
 			p.topic.isSolved = parseInt(topicData[index].isSolved, 10);
 		}
 	});
+
+	///----------------------------------------
+	const promises = hookData.posts.map(async (post, idx, postArray) => {
+		const postField = await posts.getPostFields(post.pid, ['isAnonymous']);
+		if (postField.isAnonymous) {
+			/// 깊은 복사, user를 변경하면 topics의 모든 요소의 user가 변경된다
+			post.user = usernameCensor(post.uid, {...post.user});
+			post.uid = 0;
+		}
+	});
+	await Promise.all(promises);
+	///----------------------------------------
+
+
+
 	return hookData;
 };
 
@@ -306,6 +441,15 @@ plugin.onTopicCreate = async function (payload) {
 		isQuestion = true;
 	}
 
+	if (payload.data.hasOwnProperty('isAnonymous')) {
+		//await posts.setPostFields(hookData.topic.pid, { isAnonymous: 1});
+
+		/// hookData.post와 hookData.data 를 전달받는데, hookData.post가 caller에서 사용된다
+		//uid를 0으로 설정하여 익명으로 글 쓴 것처럼 처리한다
+		payload.topic.uid = 0;
+		payload.topic.handle = "<비노출>";
+	}
+
 	/// 플러긴 옵션에 강제로 질문글로 등록이 on이거나 현재 cid가 질문글카테고리로 지정된 경우라면
 	// Overrides from ACP config
 	if (plugin._settings.forceQuestions === 'on' || plugin._settings[`defaultCid_${payload.topic.cid}`] === 'on') {
@@ -319,6 +463,76 @@ plugin.onTopicCreate = async function (payload) {
 	await topics.setTopicFields(payload.topic.tid, { isQuestion: 1, isSolved: 0 });
 	await db.sortedSetAdd('topics:unsolved', Date.now(), payload.topic.tid);
 	return payload;
+};
+
+plugin.onPostCreate = async function (hookData) {
+	/// filter:post.create 글작성완료를 눌렀을 때 호출
+	/// 생성되는 글에 익명글 취급하는 필드를 추가
+	if (hookData.data.hasOwnProperty('isAnonymous')) {
+		await posts.setPostFields(hookData.post.pid, { isAnonymous: 1});
+
+		/// hookData.post와 hookData.data 를 전달받는데, hookData.post가 caller에서 사용된다
+		//uid를 0으로 설정하여 익명으로 글 쓴 것처럼 처리한다
+		hookData.post.uid = 0;
+		hookData.data.handle = "<비노출>";
+	}
+
+	return hookData;
+};
+
+plugin.onPostEdit = async function (hookData) {
+	/// 글 편집이 완료됐을때 호출됨, filter:post.edit
+	const isAnonymous = hookData.data.isAnonymous === true || parseInt(hookData.data.isAnonymous, 10) === 1;
+	await posts.setPostFields(hookData.data.pid, { isAnonymous: isAnonymous});
+
+	if (isAnonymous) {
+		hookData.post.uid = 0;
+		hookData.post.handle = "<비노출>";
+		hookData.post.editor = 0;
+	}
+	else {
+		hookData.post.uid = hookData.data.uid;
+		// pid가 mainPid면 topic의 uid도 같이 수정해주어야 함
+		// 안그러면 post-list에서는 작성자가 공개되는데, 토픽리스트에서는 여전히 비공개 됨
+		/// 한가지 더! 프로필 리스트에서 이 작성자가 작성한 글이 안나옴
+		/// hookData.post는 pid만 넘어오므로, tid를 구하려면
+		const postData = await posts.getPostData(hookData.data.pid);
+		if (postData && postData.tid) {
+			const topicData = await topics.getTopicFields(postData.tid, ['mainPid']);
+			if (topicData && topicData.mainPid == hookData.data.pid) {
+				await topics.setTopicFields(postData.tid, {uid: hookData.data.uid});
+			}
+		}
+	}
+	
+	/// TODO: 
+	/// 또다시 익명 옵션이 있으면, hookData.handle 에 값을 써주어야 filter이후 값을 저장할 것이다
+	/// hookData.data.isAnonymous가 있으면 
+	/// uid와 handle을 0 처리
+	/// 없으면 공개로 전환하는 것이므로
+	/// filter.data.uid가 0이 아니면, 실제 아이디로 작성하는 것임
+
+	return hookData;
+};
+
+plugin.onTeasersGet = async function (hookData) {
+	/// 카테고리 목록화 접근시 각 카테고리의 마지막 글(티저정보)정보를 구할 떄 호출됨
+	///----------------------------------------
+	const promises = hookData.teasers.map(async (teaser, idx, teasersArray) => {
+		/// 헉.. 티저정보가 undefined로 채워진 배열이 있을 수 있다, 아마 아무글도 안써진 카테고리가
+		/// 있으면 그러하다
+		if (teaser) {
+			const postField = await posts.getPostFields(teaser.pid, ['isAnonymous']);
+			if (postField.isAnonymous) {
+				teaser.user = usernameCensor(teaser.uid, {...teaser.user});
+				teaser.uid = 0;
+			}
+		}
+	});
+	await Promise.all(promises);
+	///----------------------------------------
+
+	return hookData;
 };
 
 plugin.actionTopicSave = async function (hookData) {
@@ -353,6 +567,24 @@ plugin.filterComposerPush = async function (hookData) {
 	const isQuestion = await topics.getTopicField(tid, 'isQuestion');
 	hookData.isQuestion = isQuestion;
 
+	// if (hookData.cid == 16) {
+	// 	hookData.
+	// }
+
+	return hookData;
+};
+
+plugin.filterComposerTopicPush = async function (hookData) {
+	/// 여기가 호출되면 좋겠지만, 호출안된다.
+	///	composer에서 newTopic을 생성할때 호출된다. 여기에 익명글 작성 대상 카테고리 정보를 넣을 수 있다
+	/// https://github.com/NodeBB/nodebb-plugin-composer-default/blob/master/static/lib/composer.js#L546-L573
+	return hookData;
+};
+
+plugin.filterComposerBuild = async function (hookData) {
+	/// 콤포저가 작성완료되었을떄 호출을 예상하나 실제론 호출이 안된다
+	console.log("-------------- filterComposerBuild --------------");
+	//hookData.templateData.canPostAnonymous = true;
 	return hookData;
 };
 
@@ -360,11 +592,37 @@ plugin.staticApiRoutes = async function ({ router, middleware, helpers }) {
 	/// static:api.routes 훅함수, 플러긴 로딩시 호출됨
 	/// 
 	router.get('/qna/:tid', middleware.assert.topic, async (req, res) => {
-		let { isQuestion, isSolved } = await topics.getTopicFields(req.params.tid, ['isQuestion', 'isSolved']);
+		/// isAnonymous 필드에 대한 접근 처리
+		let { isQuestion, isSolved, isAnonymous } = await topics.getTopicFields(req.params.tid, ['isQuestion', 'isSolved', 'isAnonymous']);
 		isQuestion = isQuestion || '0';
 		isSolved = isSolved || '0';
-		helpers.formatApiResponse(200, res, { isQuestion, isSolved });
+		isAnonymous = isAnonymous || '0';
+		helpers.formatApiResponse(200, res, { isQuestion, isSolved, isAnonymous });
 	});
+
+	//router.get('/anonpost/:check', middleware.assert.topic, async (req, res) => {
+	router.get('/canpost', async (req, res, next) => {
+		let cid = req.query.cid;
+		let tid = req.query.tid;
+
+		if (!cid && req.query.pid) {
+			const post = await posts.getPostFields(req.query.pid, ['tid']);
+			tid = post.tid;
+		}
+
+		if (!cid && tid) {
+			const topic = await topics.getTopicFields(tid, ['cid']);
+			cid = topic.cid;
+		}
+
+		/// isAnonymous 필드에 대한 접근 처리
+		let canPostAnonymous = false;
+		let canPostQuestion = false;
+		if (cid && cid == 16)
+			canPostAnonymous = true;
+
+		helpers.formatApiResponse(200, res, { canPostQuestion, canPostAnonymous });
+	});	
 };
 
 plugin.registerTopicEvents = async function ({ types }) {
@@ -607,4 +865,42 @@ async function canSetAsSolved(tid, uid) {
 		return await privileges.topics.isAdminOrMod(tid, uid);
 	}
 	return await privileges.topics.canEdit(tid, uid);
+}
+
+function usernameCensor(censorUid, userInfo) {
+	/// user개체에서 username, displayname, fullname 필드를 비노출 처리함
+	/// TODO: pid 또는 tid에 해당하는 정보가 isUncensor값이 true일때 적용해야 함
+	if (userInfo.uid == censorUid) {
+		if (userInfo.displayname) {
+			userInfo.displayname = "<비노출>";
+		}
+		if (userInfo.username) {
+			userInfo.username = "<비노출>";
+		}
+
+		if (userInfo.fullname) {
+			userInfo.fullname = "<비노출>";
+		}
+		if (userInfo.userslug) {
+			userInfo.userslug = "#";
+		}
+
+		if (userInfo.uid) {
+			userInfo.uid = 0;
+		}
+
+		if (userInfo.picture) {
+			userInfo.picture = user.getDefaultAvatar();
+		}		
+
+		if (userInfo['icon:text']) {
+			userInfo['icon:text'] = '?';
+		}
+		if (userInfo['icon:bgColor']) {
+			userInfo['icon:bgColor'] = '#aaa';
+		}		
+		//icon:bgColor;
+	}
+
+	return userInfo;
 }
